@@ -112,6 +112,7 @@
   </style>
 </head>
 <body>
+  <audio id="bgMusic" src="main_music.mp3" preload="auto" loop></audio>
   <canvas id="game"></canvas>
 
   <div id="ui">
@@ -122,7 +123,7 @@
     <div id="message">
       <div class="card">
         <h1>TUMO Run</h1>
-        <p>2D платформер без бэкэнда. Персонаж ТУМО проходит уровень, собирает элементы и добегает до портала.</p>
+        <p> Персонаж ТУМО проходит уровень, собирает элементы и добегает до портала.</p>
         <p><b>Управление:</b> A/D или ←/→ — движение, W/↑/Space — прыжок.</p>
         <button id="startBtn">Начать игру</button>
       </div>
@@ -147,6 +148,27 @@
     const livesEl = document.getElementById('lives');
     const message = document.getElementById('message');
     const startBtn = document.getElementById('startBtn');
+    const bgMusic = document.getElementById('bgMusic');
+    const pickUp = new Audio('pickup.mp3');
+    const portal = new Audio('portal.mp3');
+    bgMusic.volume = 0.45;
+    pickUp.volume = 1;
+    portal.volume = 1;
+    function playMusic() {
+      bgMusic.play().catch(() => {
+      });
+    }
+
+    function playSound(sound) {
+      sound.currentTime = 0;
+      sound.play().catch(() => {
+
+      });
+    }
+
+    window.addEventListener('load', playMusic);
+    window.addEventListener('pointerdown', playMusic, { once: true });
+    window.addEventListener('keydown', playMusic, { once: true });
 
     const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
     let W = 0, H = 0;
@@ -255,6 +277,7 @@
     }
 
     function restartGame() {
+      playMusic();
       level.pickups.forEach(p => p.collected = false);
       player.score = 0;
       player.lives = 3;
@@ -326,11 +349,13 @@
         if (!item.collected && circleRectOverlap({ x: item.x, y: item.y, r: item.r }, player)) {
           item.collected = true;
           player.score++;
+          playSound(pickUp);
           updateUI();
+          
         }
       }
 
-      if (rectsOverlap(player, level.portal)) endGame(true);
+      if (rectsOverlap(player, level.portal)) endGame(true); playSound(portal);
 
       player.runTime += Math.abs(player.vx) * 0.08;
       cameraX = Math.max(0, Math.min(level.width - W, player.x - W * 0.38));
@@ -542,7 +567,20 @@
     function draw() {
       drawBackground();
       ctx.save();
-      const worldY = Math.max(0, H - level.height);
+      // Adjust vertical offset so level is centered / lifted on small screens
+      let worldY = H - level.height;
+
+      // If screen is taller than level, lift it a bit instead of sticking to bottom
+      if (H > level.height) {
+        worldY = (H - level.height) * 0.5; // center vertically
+      }
+
+      // Additional lift for mobile so UI doesn't cover player
+      if (window.innerWidth < 900) {
+        worldY -= 80;
+      }
+
+      worldY = Math.max(-120, worldY);
       ctx.translate(0, worldY);
       drawPickups();
       drawPortal();
