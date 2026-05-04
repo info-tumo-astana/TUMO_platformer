@@ -149,22 +149,15 @@
     const message = document.getElementById('message');
     const startBtn = document.getElementById('startBtn');
     const bgMusic = document.getElementById('bgMusic');
-    const pickUp = new Audio('pickup.mp3');
-    const portal = new Audio('portal.mp3');
+    
     bgMusic.volume = 0.45;
-    pickUp.volume = 1;
-    portal.volume = 1;
+   
     function playMusic() {
       bgMusic.play().catch(() => {
       });
     }
 
-    function playSound(sound) {
-      sound.currentTime = 0;
-      sound.play().catch(() => {
-
-      });
-    }
+   
 
     window.addEventListener('load', playMusic);
     window.addEventListener('pointerdown', playMusic, { once: true });
@@ -350,13 +343,12 @@
         if (!item.collected && circleRectOverlap({ x: item.x, y: item.y, r: item.r }, player)) {
           item.collected = true;
           player.score++;
-          playSound(pickUp);
           updateUI();
           
         }
       }
 
-      if (rectsOverlap(player, level.portal)) endGame(true); playSound(portal);
+      if (rectsOverlap(player, level.portal)) endGame(true); 
 
       player.runTime += Math.abs(player.vx) * 0.08;
       cameraX = Math.max(0, Math.min(level.width - W, player.x - W * 0.38));
