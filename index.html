@@ -428,7 +428,7 @@
         const x = item.x - cameraX;
         ctx.save();
         ctx.translate(x, item.y);
-        ctx.rotate(Date.now() * 0.003);
+        ctx.rotate(performance.now() * 0.003);
         ctx.fillStyle = '#c885ff';
         ctx.strokeStyle = '#8e48db';
         ctx.lineWidth = 3;
@@ -444,7 +444,7 @@
     function drawPortal() {
       const p = level.portal;
       const x = p.x - cameraX;
-      const pulse = Math.sin(Date.now() * 0.006) * 6;
+      const pulse = Math.sin(performance.now() * 0.006) * 4;
       ctx.save();
       ctx.translate(x + p.w / 2, p.y + p.h / 2);
       ctx.strokeStyle = '#a65cf0';
