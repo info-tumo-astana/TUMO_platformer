@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TUMO Astana Platformer</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(#f8f2ff, #ffffff);
+      color: #3b235f;
+    }
+    #ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .panel {
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,.88);
+      border: 2px solid #c58cff;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(98, 45, 150, .12);
+      font-weight: 700;
+    }
+    #message {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      background: rgba(255,255,255,.78);
+      pointer-events: auto;
+    }
+    #message.hidden { display: none; }
+    .card {
+      width: min(560px, 92vw);
+      padding: 30px;
+      border-radius: 24px;
+      background: white;
+      border: 3px solid #bb7cff;
+      box-shadow: 0 18px 50px rgba(90, 40, 130, .18);
+    }
+    h1 { margin: 0 0 12px; font-size: 36px; color: #9d57e8; }
+    p { line-height: 1.45; margin: 10px 0; }
+    button {
+      margin-top: 18px;
+      padding: 14px 24px;
+      border: none;
+      border-radius: 999px;
+      background: #a65cf0;
+      color: white;
+      font-size: 18px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(166, 92, 240, .32);
+    }
+    button:hover { background: #8f43df; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+
+    #mobileControls {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 18px;
+      display: none;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 0 18px;
+      z-index: 20;
+      pointer-events: none;
+    }
+    .controlGroup {
+      display: flex;
+      gap: 14px;
+      pointer-events: auto;
+    }
+    .touchBtn {
+      width: 72px;
+      height: 72px;
+      border-radius: 24px;
+      border: 3px solid rgba(166, 92, 240, .55);
+      background: rgba(255, 255, 255, .82);
+      color: #8f43df;
+      font-size: 30px;
+      font-weight: 900;
+      box-shadow: 0 10px 24px rgba(90, 40, 130, .18);
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .touchBtn:active,
+    .touchBtn.pressed {
+      background: #a65cf0;
+      color: white;
+      transform: translateY(2px) scale(.98);
+    }
+    @media (hover: none), (pointer: coarse), (max-width: 900px) {
+      #mobileControls { display: flex; }
+      .panel { top: 12px; left: 12px; font-size: 14px; }
+      .card { padding: 22px; }
+      h1 { font-size: 30px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="ui">
+    <div class="panel">
+      <div>⭐ Элементы: <span id="score">0</span>/<span id="total">0</span></div>
+      <div>❤️ Жизни: <span id="lives">3</span></div>
+    </div>
+    <div id="message">
+      <div class="card">
+        <h1>TUMO Run</h1>
+        <p>2D платформер без бэкэнда. Персонаж ТУМО проходит уровень, собирает элементы и добегает до портала.</p>
+        <p><b>Управление:</b> A/D или ←/→ — движение, W/↑/Space — прыжок.</p>
+        <button id="startBtn">Начать игру</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="mobileControls" aria-label="Мобильное управление">
+    <div class="controlGroup">
+      <button class="touchBtn" id="leftBtn" aria-label="Влево">←</button>
+      <button class="touchBtn" id="rightBtn" aria-label="Вправо">→</button>
+    </div>
+    <div class="controlGroup">
+      <button class="touchBtn" id="jumpBtn" aria-label="Прыжок">⤒</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const totalEl = document.getElementById('total');
+    const livesEl = document.getElementById('lives');
+    const message = document.getElementById('message');
+    const startBtn = document.getElementById('startBtn');
+
+    const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    let W = 0, H = 0;
+
+    function resize() {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width = Math.floor(W * DPR);
+      canvas.height = Math.floor(H * DPR);
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    const keys = new Set();
+    window.addEventListener('keydown', e => {
+      if (['ArrowLeft','ArrowRight','ArrowUp','Space','KeyA','KeyD','KeyW'].includes(e.code)) e.preventDefault();
+      keys.add(e.code);
+    });
+    window.addEventListener('keyup', e => keys.delete(e.code));
+
+    const touchState = { left: false, right: false, jump: false };
+
+    function bindTouchButton(buttonId, action) {
+      const btn = document.getElementById(buttonId);
+      if (!btn) return;
+
+      const press = (e) => {
+        e.preventDefault();
+        touchState[action] = true;
+        btn.classList.add('pressed');
+      };
+
+      const release = (e) => {
+        e.preventDefault();
+        touchState[action] = false;
+        btn.classList.remove('pressed');
+      };
+
+      btn.addEventListener('pointerdown', press);
+      btn.addEventListener('pointerup', release);
+      btn.addEventListener('pointercancel', release);
+      btn.addEventListener('pointerleave', release);
+      btn.addEventListener('contextmenu', e => e.preventDefault());
+    }
+
+    bindTouchButton('leftBtn', 'left');
+    bindTouchButton('rightBtn', 'right');
+    bindTouchButton('jumpBtn', 'jump');
+
+    const level = {
+      width: 4600,
+      height: 900,
+      gravity: 0.72,
+      platforms: [
+        { x: 0, y: 760, w: 620, h: 60 },
+        { x: 720, y: 670, w: 260, h: 36 },
+        { x: 1080, y: 590, w: 300, h: 36 },
+        { x: 1510, y: 700, w: 420, h: 42 },
+        { x: 2050, y: 610, w: 300, h: 36 },
+        { x: 2450, y: 520, w: 250, h: 36 },
+        { x: 2860, y: 660, w: 360, h: 42 },
+        { x: 3370, y: 570, w: 340, h: 36 },
+        { x: 3870, y: 720, w: 600, h: 60 }
+      ],
+      hazards: [
+        { x: 640, y: 820, w: 120, h: 80 },
+        { x: 1940, y: 820, w: 120, h: 80 },
+        { x: 3240, y: 820, w: 120, h: 80 }
+      ],
+      portal: { x: 4230, y: 585, w: 115, h: 135 },
+      pickups: []
+    };
+
+    const pickupPositions = [
+      [250, 680], [800, 600], [1210, 520], [1660, 630],
+      [2170, 540], [2550, 450], [3010, 590], [3520, 500], [4100, 650]
+    ];
+    level.pickups = pickupPositions.map(([x, y], i) => ({ x, y, r: 16, id: i, collected: false }));
+    totalEl.textContent = level.pickups.length;
+
+    const player = {
+      x: 80, y: 650, w: 52, h: 88,
+      vx: 0, vy: 0,
+      speed: 5.2,
+      jump: 15,
+      grounded: false,
+      face: 1,
+      score: 0,
+      lives: 3,
+      runTime: 0
+    };
+
+    let cameraX = 0;
+    let running = false;
+    let won = false;
+
+    function resetPlayer() {
+      player.x = 80;
+      player.y = 650;
+      player.vx = 0;
+      player.vy = 0;
+      player.grounded = false;
+    }
+
+    function restartGame() {
+      level.pickups.forEach(p => p.collected = false);
+      player.score = 0;
+      player.lives = 3;
+      won = false;
+      running = true;
+      resetPlayer();
+      message.classList.add('hidden');
+      updateUI();
+    }
+
+    startBtn.addEventListener('click', restartGame);
+
+    function updateUI() {
+      scoreEl.textContent = player.score;
+      livesEl.textContent = player.lives;
+    }
+
+    function rectsOverlap(a, b) {
+      return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    function circleRectOverlap(c, r) {
+      const nx = Math.max(r.x, Math.min(c.x, r.x + r.w));
+      const ny = Math.max(r.y, Math.min(c.y, r.y + r.h));
+      return Math.hypot(c.x - nx, c.y - ny) < c.r;
+    }
+
+    function update() {
+      if (!running) return;
+
+      const left = keys.has('ArrowLeft') || keys.has('KeyA') || touchState.left;
+      const right = keys.has('ArrowRight') || keys.has('KeyD') || touchState.right;
+      const jump = keys.has('ArrowUp') || keys.has('KeyW') || keys.has('Space') || touchState.jump;
+
+      player.vx = 0;
+      if (left) { player.vx = -player.speed; player.face = -1; }
+      if (right) { player.vx = player.speed; player.face = 1; }
+      if (jump && player.grounded) {
+        player.vy = -player.jump;
+        player.grounded = false;
+      }
+
+      player.vy += level.gravity;
+      player.x += player.vx;
+      player.y += player.vy;
+      player.x = Math.max(0, Math.min(level.width - player.w, player.x));
+      player.grounded = false;
+
+      for (const p of level.platforms) {
+        const wasAbove = player.y + player.h - player.vy <= p.y;
+        if (rectsOverlap(player, p) && player.vy >= 0 && wasAbove) {
+          player.y = p.y - player.h;
+          player.vy = 0;
+          player.grounded = true;
+        }
+      }
+
+      for (const h of level.hazards) {
+        if (rectsOverlap(player, h) || player.y > level.height + 100) {
+          player.lives--;
+          updateUI();
+          if (player.lives <= 0) return endGame(false);
+          resetPlayer();
+          break;
+        }
+      }
+
+      for (const item of level.pickups) {
+        if (!item.collected && circleRectOverlap({ x: item.x, y: item.y, r: item.r }, player)) {
+          item.collected = true;
+          player.score++;
+          updateUI();
+        }
+      }
+
+      if (rectsOverlap(player, level.portal)) endGame(true);
+
+      player.runTime += Math.abs(player.vx) * 0.08;
+      cameraX = Math.max(0, Math.min(level.width - W, player.x - W * 0.38));
+    }
+
+    function endGame(success) {
+      running = false;
+      won = success;
+      message.classList.remove('hidden');
+      message.querySelector('h1').textContent = success ? 'Портал достигнут!' : 'Игра окончена';
+      message.querySelector('p').innerHTML = success
+        ? `Ты собрал <b>${player.score}/${level.pickups.length}</b> элементов и дошёл до портала.`
+        : 'Попробуй ещё раз: избегай фиолетовых ловушек и прыгай точнее.';
+      message.querySelectorAll('p')[1].innerHTML = '<b>Управление:</b> A/D или ←/→ — движение, W/↑/Space — прыжок.';
+      startBtn.textContent = success ? 'Играть снова' : 'Начать заново';
+    }
+
+    function drawRoundedRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    function drawBackground() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#fbf8ff';
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.save();
+      ctx.translate(-cameraX * 0.25, 0);
+      for (let i = 0; i < 18; i++) {
+        const x = i * 320 + 80;
+        const y = 90 + (i % 4) * 70;
+        ctx.fillStyle = 'rgba(181, 113, 235, .16)';
+        ctx.beginPath();
+        ctx.moveTo(x, y - 16); ctx.lineTo(x + 10, y - 4); ctx.lineTo(x + 22, y); ctx.lineTo(x + 10, y + 4); ctx.lineTo(x, y + 16); ctx.lineTo(x - 10, y + 4); ctx.lineTo(x - 22, y); ctx.lineTo(x - 10, y - 4);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawPlatforms() {
+      for (const p of level.platforms) {
+        const x = p.x - cameraX;
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#b86ff0';
+        ctx.lineWidth = 3;
+        drawRoundedRect(x, p.y, p.w, p.h, 14);
+        ctx.fillStyle = '#d5a3ff';
+        ctx.fillRect(x + 10, p.y + 7, p.w - 20, 8);
+      }
+
+      for (const h of level.hazards) {
+        const x = h.x - cameraX;
+        ctx.fillStyle = '#7d3fba';
+        ctx.beginPath();
+        ctx.moveTo(x, h.y + h.h);
+        ctx.lineTo(x + h.w / 2, h.y);
+        ctx.lineTo(x + h.w, h.y + h.h);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    function drawPickups() {
+      for (const item of level.pickups) {
+        if (item.collected) continue;
+        const x = item.x - cameraX;
+        ctx.save();
+        ctx.translate(x, item.y);
+        ctx.rotate(Date.now() * 0.003);
+        ctx.fillStyle = '#c885ff';
+        ctx.strokeStyle = '#8e48db';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, -18); ctx.lineTo(7, -6); ctx.lineTo(20, 0); ctx.lineTo(7, 6); ctx.lineTo(0, 18); ctx.lineTo(-7, 6); ctx.lineTo(-20, 0); ctx.lineTo(-7, -6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    function drawPortal() {
+      const p = level.portal;
+      const x = p.x - cameraX;
+      const pulse = Math.sin(Date.now() * 0.006) * 6;
+      ctx.save();
+      ctx.translate(x + p.w / 2, p.y + p.h / 2);
+      ctx.strokeStyle = '#a65cf0';
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, p.w / 2 + pulse, p.h / 2 + pulse, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(166, 92, 240, .35)';
+      ctx.lineWidth = 18;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, p.w / 2 - 10, p.h / 2 - 10, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#a65cf0';
+      ctx.font = 'bold 44px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('T', 0, 0);
+      ctx.restore();
+    }
+
+    function drawPlayer() {
+      const x = player.x - cameraX;
+      const y = player.y;
+      const bob = player.grounded ? Math.sin(player.runTime) * 3 : 0;
+      const legSwing = Math.sin(player.runTime) * 11;
+      const armSwing = Math.sin(player.runTime + Math.PI) * 10;
+
+      ctx.save();
+      ctx.translate(x + player.w / 2, y + bob);
+      ctx.scale(player.face, 1);
+
+      // shadow
+      ctx.fillStyle = 'rgba(120, 70, 160, .18)';
+      ctx.beginPath();
+      ctx.ellipse(0, player.h + 2, 38, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // legs
+      ctx.strokeStyle = '#2f1e59';
+      ctx.lineWidth = 12;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-10, 56); ctx.lineTo(-18 + legSwing, 78); ctx.lineTo(-28 + legSwing, 88);
+      ctx.moveTo(10, 56); ctx.lineTo(18 - legSwing, 78); ctx.lineTo(30 - legSwing, 88);
+      ctx.stroke();
+
+      // shoes
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#9d57e8';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.roundRect(-42 + legSwing, 84, 28, 14, 6); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.roundRect(16 - legSwing, 84, 28, 14, 6); ctx.fill(); ctx.stroke();
+
+      // hoodie body
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#3b235f';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(-30, 24, 60, 44, 14);
+      ctx.fill(); ctx.stroke();
+
+      // logo text
+      ctx.fillStyle = '#b86ff0';
+      ctx.font = 'bold 12px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('TUMO', 0, 45);
+      ctx.font = 'bold 9px Arial';
+      ctx.fillText('astana', 0, 56);
+
+      // arms
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      ctx.moveTo(-25, 33); ctx.lineTo(-38, 48 + armSwing);
+      ctx.moveTo(25, 33); ctx.lineTo(40, 47 - armSwing);
+      ctx.stroke();
+      ctx.strokeStyle = '#3b235f';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-25, 33); ctx.lineTo(-38, 48 + armSwing);
+      ctx.moveTo(25, 33); ctx.lineTo(40, 47 - armSwing);
+      ctx.stroke();
+
+      // neck/head
+      ctx.fillStyle = '#ffd9bd';
+      ctx.strokeStyle = '#3b235f';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.roundRect(-9, 18, 18, 14, 5); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, 23, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+      // hair
+      ctx.fillStyle = '#7d3fba';
+      ctx.beginPath();
+      ctx.moveTo(-24, -4); ctx.quadraticCurveTo(-18, -34, 7, -26); ctx.quadraticCurveTo(22, -32, 24, -8); ctx.quadraticCurveTo(10, -18, -2, -6); ctx.quadraticCurveTo(-12, -18, -24, -4);
+      ctx.fill();
+
+      // eyes and smile
+      ctx.fillStyle = '#2f1e59';
+      ctx.beginPath(); ctx.arc(7, -2, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-9, -2, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#9d57e8';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(1, 7, 7, 0.1, Math.PI - 0.1); ctx.stroke();
+
+      // headphones
+      ctx.strokeStyle = '#3b235f';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(0, 1, 30, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+      ctx.fillStyle = '#efe0ff';
+      ctx.strokeStyle = '#3b235f';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(-23, 11, 10, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(23, 11, 10, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#b86ff0';
+      ctx.font = 'bold 10px Arial';
+      ctx.fillText('T', -23, 14);
+
+      ctx.restore();
+    }
+
+    function draw() {
+      drawBackground();
+      ctx.save();
+      const worldY = Math.max(0, H - level.height);
+      ctx.translate(0, worldY);
+      drawPickups();
+      drawPortal();
+      drawPlatforms();
+      drawPlayer();
+      ctx.restore();
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+    loop();
+  </script>
+</body>
+</html>
